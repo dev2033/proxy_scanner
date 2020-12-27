@@ -1,12 +1,15 @@
 """Главный файл(файл для запуска)"""
+import collections
 import json
 import os
+import csv
 import time
 import requests
 
 from bs4 import BeautifulSoup
 
 from logger import logger
+from color_text import out_red, out_yellow, out_blue
 
 
 proxies = []
@@ -16,42 +19,86 @@ headers = {
                       "Chrome/86.0.4240.183 Mobile Safari/537.36"
 }
 
+# создаем именованный кортеж
+ParseResult = collections.namedtuple(
+    'ParseResult',
+    (
+        'address',
+        'port',
+        'type_',
+    ),
+)
+
+# имена столбцов таблицы
+HEADERS = (
+    'Адрес',
+    'Порт',
+    'Тип',
+)
+
 
 def search_proxies(url):
-    """Выводит список из прокси адресов"""
+    """Сохраняет список из прокси адресов в файл json"""
     number = int(input("Введите колличество прокси адресов: "))
-    num = 1
-    req = requests.get(url, headers)
-    soup = BeautifulSoup(req.text, "lxml")
-    for item in soup.find_all("tr")[:number]:
-        try:
-            data = item.find_all("td")
-            address = data[0].text
-            port = data[1].text
-            type_ = data[4].text
-            proxies.append({str(num) + " адрес": {
-                "Адрес": address,
-                "Порт": port,
-                "Тип": type_,
-            }})
-            num += 1
-        except IndexError:
-            pass
-
-    if os.path.exists("data_dir"):
-        print(f"Обновляем данные о прокси")
+    if number > 100:
+        out_red("Куда тебе столько?)")
         time.sleep(2)
-        os.remove("data_dir/projects_data.json")
-        print("Данные успешно обновлены")
+        os.system("clear")
+        os.system("python main.py")
     else:
-        os.mkdir("data_dir/")
+        req = requests.get(url, headers)
+        soup = BeautifulSoup(req.text, "lxml")
+        for item in soup.find_all("tr")[:number]:
+            try:
+                # парсим страницу, выбирая параметры
+                data = item.find_all("td")
+                address = data[0].text
+                port = data[1].text
+                type_ = data[4].text
+                proxies.append({
+                    "Адрес": address,
+                    "Порт": port,
+                    "Тип": type_,
+                })
 
-    with open("data_dir/projects_data.json", "a", encoding="utf-8") as file:
-        json.dump(proxies, file, indent=4, ensure_ascii=False)
+                # заполняем таблицу данными
+                proxies.append(ParseResult(
+                    address=address,
+                    port=port,
+                    type_=type_,
+                ))
+            except IndexError:
+                pass
+
+        if os.path.exists("data_dir"):
+            out_yellow(f"Обновляем данные о прокси")
+            time.sleep(2)
+            os.remove("data_dir/projects_data.json")
+            out_blue("Данные успешно обновлены")
+        else:
+            os.mkdir("data_dir/")
+
+        with open("data_dir/projects_data.json", "a", encoding="utf-8") as file:
+            json.dump(proxies, file, indent=4, ensure_ascii=False)
+
+        save_csv()
+
+
+def save_csv():
+    """Сохраняет данные в csv таблицу"""
+    if not os.path.exists("result_csv"):
+        os.mkdir("result_csv")
+    path_file = 'result_csv/main.csv'
+    with open(path_file, 'w') as f:
+        writer = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(HEADERS)
+        for item in proxies:
+            writer.writerow(item)
 
 
 @logger.catch
 def main():
+    """Запускает скрипт"""
     search_proxies(url="https://www.sslproxies.org/")
 
 
